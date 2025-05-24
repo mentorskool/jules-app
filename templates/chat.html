@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Chat with AI Interviewer</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        #conversation { margin-bottom: 20px; border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; }
+        .message { margin-bottom: 10px; }
+        .message.user { text-align: right; color: blue; }
+        .message.ai { text-align: left; color: green; }
+        #current_question { margin-bottom: 10px; font-weight: bold; }
+        #answer_form input[type="text"] { width: 70%; padding: 8px; }
+        #answer_form input[type="submit"] { padding: 8px 15px; }
+    </style>
+</head>
+<body>
+    <h1>AI Interview</h1>
+
+    <div id="current_question">
+        <p>AI: <span id="ai_question_text">Loading first question...</span></p>
+    </div>
+
+    <div id="conversation">
+        <!-- Conversation history will be appended here -->
+    </div>
+
+    <form id="answer_form">
+        <input type="text" id="answer_text" placeholder="Type your answer here..." required>
+        <input type="submit" value="Send Answer">
+    </form>
+    <small id="paste_message" style="color: red; display: none;">Pasting is disabled for this field.</small>
+
+    <p><a href="{{ url_for('hello_world') }}">Back to Home</a></p>
+
+    <script>
+        const conversationDiv = document.getElementById('conversation');
+        const answerForm = document.getElementById('answer_form');
+        const answerText = document.getElementById('answer_text');
+        const aiQuestionText = document.getElementById('ai_question_text');
+        const pasteMessage = document.getElementById('paste_message');
+
+        let currentQuestionIndex = 0; // To keep track of which question is next from qa_bank
+
+        // Function to add a message to the conversation history
+        function addMessageToConversation(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender);
+            messageDiv.textContent = text;
+            conversationDiv.appendChild(messageDiv);
+            conversationDiv.scrollTop = conversationDiv.scrollHeight; // Scroll to bottom
+        }
+
+        // Function to display AI's question
+        function displayAIQuestion(question) {
+            aiQuestionText.textContent = question;
+        }
+
+        // Fetch the first question when the page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/chat_message', {
+                    method: 'POST', // Using POST for consistency, even for the first question
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ initial_load: true }) // Signal that this is the first load
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (data.question) {
+                    displayAIQuestion(data.question);
+                    // Optionally add it to conversation history as well
+                    // addMessageToConversation(`AI: ${data.question}`, 'ai');
+                } else if (data.error) {
+                    displayAIQuestion(data.error);
+                     addMessageToConversation(`Error: ${data.error}`, 'ai');
+                }
+            } catch (error) {
+                console.error('Error fetching first question:', error);
+                displayAIQuestion('Failed to load question. Please try refreshing.');
+                addMessageToConversation('Error: Could not fetch first question.', 'ai');
+            }
+        });
+
+        // Handle answer submission
+        answerForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const userAnswer = answerText.value.trim();
+            if (!userAnswer) return;
+
+            addMessageToConversation(`You: ${userAnswer}`, 'user');
+            answerText.value = ''; // Clear input field
+
+            try {
+                const response = await fetch('/chat_message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ answer: userAnswer, question_index: currentQuestionIndex })
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (data.question) {
+                    displayAIQuestion(data.question);
+                    currentQuestionIndex = data.next_question_index !== undefined ? data.next_question_index : currentQuestionIndex + 1;
+                } else if (data.message) { // Handle end of interview or other messages
+                     displayAIQuestion(data.message); 
+                     addMessageToConversation(`AI: ${data.message}`, 'ai');
+                     answerForm.style.display = 'none'; // Hide form
+                     if (data.summary_link) {
+                        const summaryLinkP = document.createElement('p');
+                        const summaryLinkA = document.createElement('a');
+                        summaryLinkA.href = data.summary_link;
+                        summaryLinkA.textContent = "View Interview Summary";
+                        summaryLinkP.appendChild(summaryLinkA);
+                        // Append after the answer form or conversation div
+                        conversationDiv.parentElement.insertBefore(summaryLinkP, conversationDiv.nextSibling.nextSibling); // after form and paste_message
+                     }
+                }
+                else if (data.error) {
+                    addMessageToConversation(`Error: ${data.error}`, 'ai');
+                    // Don't necessarily update currentQuestionIndex on error
+                }
+            } catch (error) {
+                console.error('Error sending/receiving message:', error);
+                addMessageToConversation('Error: Could not connect to the AI. Please try again.', 'ai');
+            }
+        });
+
+        // Prevent pasting into the answer field
+        answerText.addEventListener('paste', (event) => {
+            event.preventDefault();
+            pasteMessage.style.display = 'inline';
+            setTimeout(() => {
+                pasteMessage.style.display = 'none';
+            }, 2000); // Hide message after 2 seconds
+        });
+
+        // Optional: Handle Ctrl+V (and Cmd+V for Mac) specifically if 'paste' event isn't enough for all browsers/cases
+        // The 'paste' event should generally cover this.
+        answerText.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+                event.preventDefault();
+                pasteMessage.style.display = 'inline';
+                setTimeout(() => {
+                    pasteMessage.style.display = 'none';
+                }, 2000);
+            }
+        });
+
+    </script>
+</body>
+</html>

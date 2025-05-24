@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Interview Summary Report</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; }
+        .qa-pair { margin-bottom: 15px; padding: 10px; border: 1px solid #eee; }
+        .qa-pair .question { font-weight: bold; color: #333; }
+        .qa-pair .answer { margin-top: 5px; color: #555; }
+        h1, h2 { color: #333; }
+    </style>
+</head>
+<body>
+    <h1>Interview Summary Report</h1>
+
+    <h2>Total Questions Answered: {{ history|length }}</h2>
+
+    {% if history %}
+        {% for item in history %}
+            <div class="qa-pair">
+                <p class="question">Q: {{ item.question }}</p>
+                <p class="answer">A: {{ item.answer }}</p>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No conversation history found. Perhaps the interview hasn't started or was reset.</p>
+    {% endif %}
+
+    <p><a href="{{ url_for('hello_world') }}">Back to Home</a></p>
+    <p><a href="{{ url_for('start_chat') }}">Start New Interview</a></p>
+</body>
+</html>
